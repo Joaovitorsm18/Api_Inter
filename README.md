@@ -37,7 +37,6 @@ Automatiza o download de extratos (PDF e OFX) do Banco Inter para múltiplos con
 1. Clone este repositório:
    ```bash
    git clone https://github.com/Joaovitorsm18/Api_Inter.git
-   cd seu-repo
    ```
 
 2. Crie e ative um virtualenv:
