@@ -6,7 +6,7 @@ import base64
 import re
 import time
 
-BASE_PATH = './CONDOMÍNIOS'
+BASE_PATH = '../CONDOMÍNIOS'
 
 # --- Funções de Data ---
 def get_mes_atual_datas():

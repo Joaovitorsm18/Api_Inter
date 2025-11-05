@@ -1,6 +1,6 @@
 import os
 from datetime import datetime, timedelta
-from main import build_ofx, get_mes_atual_datas
+from extrato_mensal import build_ofx, get_mes_atual_datas
 from dotenv import dotenv_values, load_dotenv
 import requests
 import time
@@ -11,14 +11,14 @@ from email.utils import formataddr
 import argparse
 import tempfile
 
-BASE_PATH = './CONDOMÍNIOS'
+BASE_PATH = '../CONDOMÍNIOS'
 
 load_dotenv()
 
 
-def enviar_email_resumo(assunto, corpo):
+def enviar_email_resumo(assunto, corpo, remetente_nome):
     remetente_email = os.getenv("EMAIL_REMETENTE")
-    remetente_nome = "Relatório de Conciliação Diária"
+    remetente_nome = remetente_nome
     senha = os.getenv("EMAIL_SENHA")  
     email_destinatario = os.getenv("EMAIL_DESTINATARIO")
 
@@ -182,7 +182,7 @@ def analisar_conciliacao(itens):
             data_dt = None  # Se não conseguir converter, considera como erro
 
         # Só adiciona ao relatório se for até o dia atual
-        if abs(valor_banco - valor_software) > 0.01 and (data_dt is None or data_dt.date() <= datetime.today().date()):
+        if abs(valor_banco - valor_software) > 0.001 and (data_dt is None or data_dt.date() <= datetime.today().date()):
             conciliado = False
             diferencas.append({
                 'data': data,
@@ -339,8 +339,8 @@ def main(enviar_email=False):
             corpo_email = "Condomínios com conciliação não finalizada:\n\n"
             for nome, resultado in nao_conciliados.items():
                 corpo_email += f"- {nome}:\n{resultado}\n\n"
-            
-            enviar_email_resumo("Relatório de Conciliação - Erros Encontrados", corpo_email)
+
+            enviar_email_resumo("Relatório de Conciliação - Erros Encontrados", corpo_email, "Relatório de Conciliação Diária")
         else:
             print("📬 Todos os condomínios foram conciliados com sucesso.")
 
