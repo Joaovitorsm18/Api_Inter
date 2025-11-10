@@ -1,3 +1,4 @@
+import json
 import os
 from datetime import datetime, timedelta
 from extrato_mensal import build_ofx, get_mes_atual_datas
@@ -221,6 +222,60 @@ def exibir_resultado_conciliacao(analise):
         return "❌ Não conciliado nas datas:\n" + "\n".join(f"- {data}" for data in datas_nao_conciliadas)
     else:
         return "⚠️ Diferenças encontradas, mas sem datas específicas."
+
+def obter_ultima_transacao(transacoes):
+    """Retorna a última transação baseada na data mais recente"""
+    if not transacoes:
+        return None
+    
+    # Ordena por data (mais recente primeiro)
+    transacoes_ordenadas = sorted(
+        transacoes, 
+        key=lambda x: (x['dataTransacao'], x.get('dataInclusao', '')), 
+        reverse=True
+    )
+    return transacoes_ordenadas[0]
+
+def salvar_ultima_transacao(pasta_condominio, transacao):
+    """Salva a última transação em arquivo"""
+    arquivo_transacao = os.path.join(pasta_condominio, "ultima_transacao.txt")
+    
+    with open(arquivo_transacao, "w", encoding="utf-8") as f:
+        # Salva apenas os campos essenciais para comparação
+        dados_simplificados = {
+            'idTransacao': transacao.get('idTransacao'),
+            'dataTransacao': transacao.get('dataTransacao'),
+            'valor': transacao.get('valor'),
+            'tipoTransacao': transacao.get('tipoTransacao'),
+            'descricao': transacao.get('descricao')
+        }
+        json.dump(dados_simplificados, f, ensure_ascii=False, indent=2)
+
+def carregar_ultima_transacao(pasta_condominio):
+    """Carrega a última transação salva"""
+    arquivo_transacao = os.path.join(pasta_condominio, "ultima_transacao.txt")
+    
+    if not os.path.exists(arquivo_transacao):
+        return None
+    
+    try:
+        with open(arquivo_transacao, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except (json.JSONDecodeError, FileNotFoundError):
+        return None
+
+def transacoes_sao_iguais(transacao1, transacao2):
+    """Compara se duas transações são iguais"""
+    if not transacao1 or not transacao2:
+        return False
+    
+    campos_comparacao = ['idTransacao', 'dataTransacao', 'valor', 'tipoTransacao']
+    
+    for campo in campos_comparacao:
+        if transacao1.get(campo) != transacao2.get(campo):
+            return False
+    
+    return True
    
 def processar_condominio(nome_condominio, data_inicio, data_fim, resultados_conciliacao):
     pasta_condominio = os.path.join(BASE_PATH, nome_condominio)
@@ -284,8 +339,24 @@ def processar_condominio(nome_condominio, data_inicio, data_fim, resultados_conc
     except requests.exceptions.HTTPError as e:
         print(f"❌ Erro ao baixar OFX do condomínio {nome_condominio}: {e}")
         return
-    
     transacoes = response_ofx.json().get("transacoes", [])
+
+    ultima_transacao_atual = obter_ultima_transacao(transacoes)
+    ultima_transacao_salva = carregar_ultima_transacao(pasta_condominio)
+    
+    print(f"📊 {len(transacoes)} transações encontradas")
+    print(f"🆕 Última transação atual: {ultima_transacao_atual.get('dataTransacao') if ultima_transacao_atual else 'N/A'}")
+    print(f"💾 Última transação salva: {ultima_transacao_salva.get('dataTransacao') if ultima_transacao_salva else 'N/A'}")
+
+    # Se a última transação é a mesma, não precisa processar
+    if (ultima_transacao_salva and 
+        transacoes_sao_iguais(ultima_transacao_atual, ultima_transacao_salva)):
+        print(f"🔄 Nenhuma transação nova. Pulando conciliação.")
+        resultados_conciliacao[nome_condominio] = "✅ Sem alterações"
+        return
+    
+    print(f"🔄 Novas transações detectadas. Processando...")
+
     ofx_data = build_ofx(transacoes, saldo, data_inicio, data_fim)
     caminho_teste = tempfile.gettempdir() 
     
@@ -302,6 +373,8 @@ def processar_condominio(nome_condominio, data_inicio, data_fim, resultados_conc
     
     id_contabanco = get_id_contabanco(id_condominio)
     conciliar_super(caminho_com_nome ,id_contabanco)
+    salvar_ultima_transacao(pasta_condominio, ultima_transacao_atual)
+    print(f"💾 Última transação atualizada")
     os.remove(caminho_com_nome)
     
     concilidacao_atual = get_conciliacao_atual(id_contabanco, id_condominio)
